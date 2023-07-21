@@ -171,7 +171,7 @@ if __name__ == "__main__":
                 prompt = encode_prompt(prompt_instructions, classification=args.use_clf_seed_tasks_only)
                 prompt=[{"role":'user',"content":f"{prompt}"}]
                 #batch_inputs.append(prompt)
-                print(prompt)
+                #print(prompt)
             results = make_gpt3_requests(
                 engine=args.engine,
                 prompts=prompt,

@@ -23,7 +23,15 @@ def make_requests(
     while retry_cnt <= retries:
         try:
             response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo-16k-0613", messages=prompts
+                model="gpt-3.5-turbo-16k-0613", 
+                messages=prompts,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                frequency_penalty=frequency_penalty,
+                presence_penalty=presence_penalty,
+                stop=stop_sequences,
+                n=n,
             )
             break
         except openai.error.OpenAIError as e:
