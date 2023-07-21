@@ -18,10 +18,10 @@ random.seed(42)
 
 def encode_prompt(prompt_instructions, classification=False):
     """Encode multiple prompt instructions into a single string."""
-    if classification:
-        prompt = "Come up with a series of classification tasks. Try to specify the possible output labels when possible.\n"
-    else:
-        prompt = "Come up with a series of tasks:\n"
+    #if classification:
+    #    prompt = "Come up with a series of classification tasks. Try to specify the possible output labels when possible.\n"
+    #else:
+    prompt = "다음으로 올만한 명령을 작성하시오:\n"
     for idx, instruction in enumerate(prompt_instructions):
         instruction = re.sub(r"\s+", " ", instruction).strip().rstrip(":")
         prompt += f"{idx+1}. {instruction}\n"
@@ -41,7 +41,7 @@ def find_word_in_string(w, s):
 def post_process_gpt3_response(response):
     if response is None or response["choices"][0]["finish_reason"] == "length":
         return []
-    raw_instructions = re.split(r"\n\d+\s?\. ", response["choices"][0]["text"])
+    raw_instructions = re.split(r"\n\d+\s?\. ", response["choices"][0]["message"]["content"])
     instructions = []
     for inst in raw_instructions:
         inst = re.sub(r"\s+", " ", inst).strip()
@@ -52,20 +52,20 @@ def post_process_gpt3_response(response):
         if len(inst.split()) <= 3 or len(inst.split()) > 150:
             continue
         # filter based on keywords that are not suitable for language models.
-        if any(find_word_in_string(word, inst) for word in ["image", "images", "graph", "graphs", "picture", "pictures", "file", "files", "map", "maps", "draw", "plot", "go to"]):
-            continue
+        #if any(find_word_in_string(word, inst) for word in ["이미지","이미지들", "사진들","사진", "그래프","그래프들", "그림","그림들", "파일", "파일들", "지도", "지도들"]):
+        #    continue
         # We found that the model tends to add "write a program" to some existing instructions, which lead to a lot of such instructions.
         # And it's a bit comfusing whether the model need to write a program or directly output the result. 
         # Here we filter them out.
         # Note this is not a comprehensive filtering for all programming instructions.
-        if inst.startswith("Write a program"):
-            continue
+        #if inst.startswith("Write a program"):
+        #    continue
         # filter those starting with punctuation
         if inst[0] in string.punctuation:
             continue
         # filter those starting with non-english character
-        if not inst[0].isascii():
-            continue
+        #if not inst[0].isascii():
+        #    continue
         instructions.append(inst)
     return instructions
 
@@ -112,7 +112,7 @@ def parse_args():
     parser.add_argument(
         "--request_batch_size",
         type=int,
-        default=5,
+        default=1,
         help="The number of requests to send to GPT3 at a time."
     )
     parser.add_argument(
@@ -130,7 +130,7 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
-    seed_tasks = [json.loads(l) for l in open(args.seed_tasks_path, "r")]
+    seed_tasks = [json.loads(l) for l in open(args.seed_tasks_path, "r",encoding='UTF-8')]
     if args.use_clf_seed_tasks_only:
         seed_tasks = [t for t in seed_tasks if t["is_classification"]]
     seed_instructions = [t["instruction"] for t in seed_tasks]
@@ -156,9 +156,9 @@ if __name__ == "__main__":
     if machine_instructions:
         progress_bar.update(len(machine_instructions))
 
-    with open(os.path.join(args.batch_dir, "machine_generated_instructions.jsonl"), "a") as fout:
+    with open(os.path.join(args.batch_dir, "machine_generated_instructions.jsonl"), "a",encoding='UTF-8') as fout:
         while len(machine_instructions) < args.num_instructions_to_generate:
-            batch_inputs = []
+            #batch_inputs = []
             for _ in range(args.request_batch_size):
                 # sample machine instructions from the pool
                 prompt_instructions = sample_machine_instructions(
@@ -169,10 +169,12 @@ if __name__ == "__main__":
                 prompt_instructions += random.sample(seed_instructions, args.num_prompt_instructions - len(prompt_instructions))
                 random.shuffle(prompt_instructions)
                 prompt = encode_prompt(prompt_instructions, classification=args.use_clf_seed_tasks_only)
-                batch_inputs.append(prompt)
+                prompt=[{"role":'user',"content":f"{prompt}"}]
+                #batch_inputs.append(prompt)
+                print(prompt)
             results = make_gpt3_requests(
                 engine=args.engine,
-                prompts=batch_inputs,
+                prompts=prompt,
                 max_tokens=1024,
                 temperature=0.7,
                 top_p=0.5,
@@ -193,23 +195,23 @@ if __name__ == "__main__":
                 all_metadata += [result] * len(new_instructions)
 
             for inst, metadata in zip(instructions, all_metadata):
-                with Pool(4) as p:
-                    rouge_scores = p.map(partial(scorer.score, inst), seed_instructions + machine_instructions)
-                rouge_scores = [score["rougeL"].fmeasure for score in rouge_scores]
+                #with Pool(4) as p:
+                #    rouge_scores = p.map(partial(scorer.score, inst), seed_instructions + machine_instructions)
+                #rouge_scores = [score["rougeL"].fmeasure for score in rouge_scores]
                 # rouge_scores = [scorer.score(inst, e_inst)["rougeL"].fmeasure for e_inst in human_instructions + machine_instructions]
-                if max(rouge_scores) > 0.7:
-                    continue
+                #if max(rouge_scores) > 0.7:
+                #    continue
                 all_instructions = seed_instructions + machine_instructions
-                most_similar_instructions = {
-                        all_instructions[i] : rouge_scores[i] for i in np.argsort(rouge_scores)[-10:][::-1]
-                    }
+                #most_similar_instructions = {
+                #        all_instructions[i] : rouge_scores[i] for i in np.argsort(rouge_scores)[-10:][::-1]
+                #    }
                 machine_instructions.append(inst)
                 fout.write(json.dumps({
                     "instruction": inst,
-                    "most_similar": most_similar_instructions,
-                    "avg_similarity_score": float(np.mean(rouge_scores)),
+                #    "most_similar": most_similar_instructions,
+                #    "avg_similarity_score": float(np.mean(rouge_scores)),
                     "metadata": metadata,
                     "request_idx": request_idx
-                }) + "\n")
+                },ensure_ascii=False) + "\n")
                 progress_bar.update(1)
             request_idx += 1

@@ -19,21 +19,11 @@ def make_requests(
     if organization is not None:
         openai.organization = organization
     retry_cnt = 0
-    backoff_time = 30
+    backoff_time = 22
     while retry_cnt <= retries:
         try:
-            response = openai.Completion.create(
-                engine=engine,
-                prompt=prompts,
-                max_tokens=target_length,
-                temperature=temperature,
-                top_p=top_p,
-                frequency_penalty=frequency_penalty,
-                presence_penalty=presence_penalty,
-                stop=stop_sequences,
-                logprobs=logprobs,
-                n=n,
-                best_of=best_of,
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo-16k-0613", messages=prompts
             )
             break
         except openai.error.OpenAIError as e:
