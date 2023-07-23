@@ -11,6 +11,8 @@ from multiprocessing import Pool
 from functools import partial
 from rouge_score import rouge_scorer
 from gpt3_api import make_requests as make_gpt3_requests
+from sentence_transformers import SentenceTransformer, util
+from find_dup_opti import filter
 
 
 random.seed(42)
@@ -52,8 +54,8 @@ def post_process_gpt3_response(response):
         if len(inst.split()) <= 3 or len(inst.split()) > 150:
             continue
         # filter based on keywords that are not suitable for language models.
-        #if any(find_word_in_string(word, inst) for word in ["이미지","이미지들", "사진들","사진", "그래프","그래프들", "그림","그림들", "파일", "파일들", "지도", "지도들"]):
-        #    continue
+        if any(find_word_in_string(word, inst) for word in ["이미지","이미지를","이미지에","이미지에서","이미지들", "사진들","사진","사진을","사진에","사진에서", "그래프","그래프들","그래프에","그래프에서","그래프를", "그림","그림을","그림에","그림에서","그림들", "파일","파일을", "파일에","파일에서","파일들", "지도","지도를", "지도들","지도에서","코드","코드를","코드에","코드에서","코드들"]):
+            continue
         # We found that the model tends to add "write a program" to some existing instructions, which lead to a lot of such instructions.
         # And it's a bit comfusing whether the model need to write a program or directly output the result. 
         # Here we filter them out.
@@ -149,8 +151,8 @@ if __name__ == "__main__":
         print(f"Loaded {len(machine_instructions)} machine-generated instructions")
 
     # similarities = {}
-    scorer = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=False)
-    
+    #scorer = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=False)
+    embedder = SentenceTransformer("jhgan/ko-sroberta-multitask")
     # now let's generate new instructions!
     progress_bar = tqdm.tqdm(total=args.num_instructions_to_generate)
     if machine_instructions:
@@ -201,15 +203,19 @@ if __name__ == "__main__":
                 # rouge_scores = [scorer.score(inst, e_inst)["rougeL"].fmeasure for e_inst in human_instructions + machine_instructions]
                 #if max(rouge_scores) > 0.7:
                 #    continue
+                scores=filter(seed_instructions+machine_instructions,inst,embedder)
+                if max(scores)>0.77:
+                    continue
+                
                 all_instructions = seed_instructions + machine_instructions
-                #most_similar_instructions = {
-                #        all_instructions[i] : rouge_scores[i] for i in np.argsort(rouge_scores)[-10:][::-1]
-                #    }
+                most_similar_instructions = {
+                        all_instructions[i] : scores[i] for i in np.argsort(scores)[-1]
+                    }
                 machine_instructions.append(inst)
                 fout.write(json.dumps({
                     "instruction": inst,
-                #    "most_similar": most_similar_instructions,
-                #    "avg_similarity_score": float(np.mean(rouge_scores)),
+                    "most_similar": most_similar_instructions,
+                    "avg_similarity_score": float(np.mean(scores)),
                     "metadata": metadata,
                     "request_idx": request_idx
                 },ensure_ascii=False) + "\n")

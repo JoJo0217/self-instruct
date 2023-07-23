@@ -10,7 +10,7 @@ import time
 
 def make_requests(
         engine, prompts, max_tokens, temperature, top_p, 
-        frequency_penalty, presence_penalty, stop_sequences, logprobs, n, best_of, retries=3, api_key=None, organization=None
+        frequency_penalty, presence_penalty, stop_sequences, logprobs, n, best_of, retries=12, api_key=None, organization=None
     ):
     response = None
     target_length = max_tokens
@@ -19,7 +19,14 @@ def make_requests(
     if organization is not None:
         openai.organization = organization
     retry_cnt = 0
-    backoff_time = 22
+    backoff_time = 10
+    keys=['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',
+          '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',
+          #'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',
+          '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',
+          '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',
+          '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',
+          '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']
     while retry_cnt <= retries:
         try:
             response = openai.ChatCompletion.create(
@@ -43,6 +50,7 @@ def make_requests(
                 print(f"Retrying in {backoff_time} seconds...")
                 time.sleep(backoff_time)
                 backoff_time *= 1.5
+                openai.api_key=keys[random.randint(0,len(keys)-1)]
             retry_cnt += 1
     
     if isinstance(prompts, list):
