@@ -23,7 +23,10 @@ def encode_prompt(prompt_instructions, classification=False):
     #if classification:
     #    prompt = "Come up with a series of classification tasks. Try to specify the possible output labels when possible.\n"
     #else:
-    prompt = "다음으로 올만한 명령을 작성하시오:\n"
+    prompt = "다음으로 올수 있는 질문을 작성해주세요.\n 요구사항은 다음과 같습니다:\n \
+            번호와 함께 연속된 예시 질문들이 주어집니다.\n \
+            예시 질문들의 경향성을 유지하여 새로운 질문을 만들어 주세요.\n \
+            질문들은 최대한 일상적으로 사용가능한 질문으로 작성해야 합니다.\n\n"
     for idx, instruction in enumerate(prompt_instructions):
         instruction = re.sub(r"\s+", " ", instruction).strip().rstrip(":")
         prompt += f"{idx+1}. {instruction}\n"
@@ -120,6 +123,7 @@ def parse_args():
     parser.add_argument(
         "--api_key",
         type=str,
+        default=None,
         help="The API key to use. If not specified, the key will be read from the environment variable OPENAI_API_KEY."
     )
     parser.add_argument(
@@ -203,19 +207,29 @@ if __name__ == "__main__":
                 # rouge_scores = [scorer.score(inst, e_inst)["rougeL"].fmeasure for e_inst in human_instructions + machine_instructions]
                 #if max(rouge_scores) > 0.7:
                 #    continue
-                scores=filter(seed_instructions+machine_instructions,inst,embedder)
-                if max(scores)>0.77:
-                    continue
+                all_instructions = np.array(seed_instructions + machine_instructions)
+                scores=filter(all_instructions,inst,embedder)
                 
-                all_instructions = seed_instructions + machine_instructions
-                most_similar_instructions = {
-                        all_instructions[i] : scores[i] for i in np.argsort(scores)[-1]
-                    }
+                if max(scores)>0.77:
+                    idx=np.where(scores > 0.78)[0]
+                    print(f"중복 발생 {scores[idx]}점:")
+                    print(all_instructions[idx])
+                    print(inst)
+                    continue
+                if len(scores)>1:
+                    most_idx=np.argsort(scores)[-1]
+                    most_similar_instructions = {
+                            all_instructions[most_idx] : float(scores[most_idx])
+                        }
+                    mean_score=float(np.mean(scores))
+                else:
+                    most_similar_instructions=None
+                    mean_score=0
                 machine_instructions.append(inst)
                 fout.write(json.dumps({
                     "instruction": inst,
                     "most_similar": most_similar_instructions,
-                    "avg_similarity_score": float(np.mean(scores)),
+                    "avg_similarity_score": mean_score,
                     "metadata": metadata,
                     "request_idx": request_idx
                 },ensure_ascii=False) + "\n")
